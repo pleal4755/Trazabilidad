@@ -65,6 +65,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
   .qrform{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .qrform input{width:100%;padding:11px;font-size:1rem;border:1px solid var(--line);border-radius:9px;font-family:inherit}
+  .qrtext{width:100%;height:140px;padding:11px;font-family:"JetBrains Mono",monospace;font-size:.92rem;border:1px solid var(--line);border-radius:10px;resize:vertical}
   #qrGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-top:18px}
   .qrcell{border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;background:#fff;break-inside:avoid;position:relative}
   .qrcell img,.qrcell canvas{margin:0 auto;display:block}
@@ -133,19 +134,15 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <!-- ───── Vista: generador de QR ───── -->
   <section id="vistaQR" class="oculto">
     <div class="noprint">
-      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Llena los datos de una unidad y agrégala. Puedes acumular varias y luego imprimirlas juntas. El QR lleva los cuatro datos.</p>
-      <div class="qrform">
-        <div><label>No. de placa</label><input id="q_placa" placeholder="P-123ABC"></div>
-        <div><label>Nombre del piloto</label><input id="q_piloto" placeholder="Juan Pérez"></div>
-        <div><label>Color</label><input id="q_color" placeholder="Rojo"></div>
-        <div><label>No. de unidad</label><input id="q_unidad" placeholder="07"></div>
-      </div>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, con los datos separados por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El QR lleva los tres datos.</p>
+      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07&#10;C-456DEF, Azul, 12&#10;P-789GHI, Blanco, 03"></textarea>
       <div class="controls" style="margin-top:12px">
         <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
-        <button class="btn prim" onclick="agregarQR()">Agregar</button>
+        <button class="btn prim" onclick="generarLista()">Generar todos</button>
         <button class="btn" onclick="window.print()">Imprimir</button>
-        <button class="btn" onclick="limpiarQR()">Limpiar todo</button>
+        <button class="btn" onclick="limpiarQR()">Limpiar</button>
       </div>
+      <div id="qrAviso" style="margin-top:10px;font-size:.85rem;color:var(--muted)"></div>
     </div>
     <div id="qrGrid"></div>
   </section>
@@ -229,47 +226,40 @@ function pintarRuta(unidades, umbral){
 
 function tick(){ if($('auto').checked) cargarRuta(); }
 
-// ── Generador de QR (uno por uno; el QR lleva los 4 datos en JSON) ──
-function agregarQR(){
-  const placa  = $('q_placa').value.trim().toUpperCase();
-  const piloto = $('q_piloto').value.trim();
-  const color  = $('q_color').value.trim();
-  const unidad = $('q_unidad').value.trim();
-  if(!placa){ alert('La placa es obligatoria.'); return; }
-
+// ── Generador de QR por lote (el QR lleva placa, color y unidad en JSON) ──
+function generarLista(){
+  limpiarQR();
   const tam = parseInt($('tam').value)||180;
-  // El QR codifica un JSON. La app de campo lee la placa de aquí y guarda el resto.
-  const contenido = JSON.stringify({ placa, piloto, color, unidad });
+  const lineas = $('lista').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lineas.length){ avisoQR('Pega al menos una unidad.', true); return; }
 
-  // Genera primero en un div suelto; nivel M para que no se desborde con textos largos.
-  const q = document.createElement('div');
-  try {
-    new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M });
-  } catch (e) {
-    alert('No se pudo generar el QR (texto muy largo). Acorta el nombre del piloto. ' + e);
-    return;
-  }
+  let ok=0; const errores=[];
+  lineas.forEach((linea, i)=>{
+    const p = linea.split(/[,\t;]/).map(s=>s.trim());
+    const placa  = (p[0]||'').toUpperCase();
+    const color  = p[1]||'';
+    const unidad = p[2]||'';
+    if(!placa){ errores.push('Línea '+(i+1)+': sin placa'); return; }
 
-  // El QR salió bien: ahora sí construimos la tarjeta.
-  const cell = document.createElement('div'); cell.className='qrcell';
-  const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
-  x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
-  cell.appendChild(q);
-  const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
-  const meta = document.createElement('div'); meta.className='meta';
-  meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
-  cell.appendChild(meta);
-  $('qrGrid').appendChild(cell);
+    const contenido = JSON.stringify({ placa, color, unidad });
+    const q = document.createElement('div');
+    try { new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M }); }
+    catch(e){ errores.push('Línea '+(i+1)+' ('+placa+'): '+e); return; }
 
-  // Limpia los campos para la siguiente unidad.
-  $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
-  $('q_placa').focus();
+    const cell = document.createElement('div'); cell.className='qrcell';
+    cell.appendChild(q);
+    const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
+    const meta = document.createElement('div'); meta.className='meta';
+    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+    cell.appendChild(meta);
+    $('qrGrid').appendChild(cell);
+    ok++;
+  });
+
+  avisoQR(ok+' QR generados.' + (errores.length ? ('  Con problema: '+errores.join(' · ')) : ''), errores.length>0);
 }
-function limpiarQR(){ $('qrGrid').innerHTML=''; }
-// Enter en cualquier campo agrega la unidad
-['q_placa','q_piloto','q_color','q_unidad'].forEach(id=>{
-  $(id).addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); agregarQR(); } });
-});
+function limpiarQR(){ $('qrGrid').innerHTML=''; avisoQR(''); }
+function avisoQR(t, err){ const e=$('qrAviso'); if(e){ e.textContent=t||''; e.style.color = err ? 'var(--alert)' : 'var(--muted)'; } }
 
 // init
 $('umbral').value = localStorage.getItem('umbral') || 90;
