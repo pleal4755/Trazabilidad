@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#eceeec; --surface:#ffffff; --line:#dfe3df; --ink:#18211d; --muted:#5f6b66;
@@ -238,24 +238,29 @@ function agregarQR(){
   // El QR codifica un JSON. La app de campo lee la placa de aquí y guarda el resto.
   const contenido = JSON.stringify({ placa, piloto, color, unidad });
 
-  const canvas = document.createElement('canvas');
-  QRCode.toCanvas(canvas, contenido, { errorCorrectionLevel:'M', width:tam, margin:1 }, function(err){
-    if(err){ alert('No se pudo generar el QR: ' + err); return; }
-    // El QR salió bien: ahora sí construimos la tarjeta.
-    const cell = document.createElement('div'); cell.className='qrcell';
-    const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
-    x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
-    cell.appendChild(canvas);
-    const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
-    const meta = document.createElement('div'); meta.className='meta';
-    meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
-    cell.appendChild(meta);
-    $('qrGrid').appendChild(cell);
+  // Genera primero en un div suelto; nivel M para que no se desborde con textos largos.
+  const q = document.createElement('div');
+  try {
+    new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M });
+  } catch (e) {
+    alert('No se pudo generar el QR (texto muy largo). Acorta el nombre del piloto. ' + e);
+    return;
+  }
 
-    // Limpia los campos para la siguiente unidad.
-    $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
-    $('q_placa').focus();
-  });
+  // El QR salió bien: ahora sí construimos la tarjeta.
+  const cell = document.createElement('div'); cell.className='qrcell';
+  const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
+  x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
+  cell.appendChild(q);
+  const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
+  const meta = document.createElement('div'); meta.className='meta';
+  meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+  cell.appendChild(meta);
+  $('qrGrid').appendChild(cell);
+
+  // Limpia los campos para la siguiente unidad.
+  $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
+  $('q_placa').focus();
 }
 function limpiarQR(){ $('qrGrid').innerHTML=''; }
 // Enter en cualquier campo agrega la unidad
