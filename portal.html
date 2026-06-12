@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#eceeec; --surface:#ffffff; --line:#dfe3df; --ink:#18211d; --muted:#5f6b66;
@@ -151,7 +151,7 @@
 
 <script>
 // ── CONFIG: pega aquí la URL /exec de tu Apps Script (la misma del backend) ──
-const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
+const API = 'PEGA_AQUI_LA_URL_DEL_APPS_SCRIPT';
 
 const $ = id => document.getElementById(id);
 let timer = null;
@@ -226,7 +226,7 @@ function pintarRuta(unidades, umbral){
 
 function tick(){ if($('auto').checked) cargarRuta(); }
 
-// ── Generador de QR (uno por uno; el QR lleva los 4 datos en JSON; nivel H para durabilidad) ──
+// ── Generador de QR (uno por uno; el QR lleva los 4 datos en JSON) ──
 function agregarQR(){
   const placa  = $('q_placa').value.trim().toUpperCase();
   const piloto = $('q_piloto').value.trim();
@@ -238,23 +238,30 @@ function agregarQR(){
   // El QR codifica un JSON. La app de campo lee la placa de aquí y guarda el resto.
   const contenido = JSON.stringify({ placa, piloto, color, unidad });
 
-  const cell = document.createElement('div'); cell.className='qrcell';
-  const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
-  x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
-  const q = document.createElement('div'); cell.appendChild(q);
-  const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
-  const meta = document.createElement('div'); meta.className='meta';
-  meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
-  cell.appendChild(meta);
-  $('qrGrid').appendChild(cell);
+  const canvas = document.createElement('canvas');
+  QRCode.toCanvas(canvas, contenido, { errorCorrectionLevel:'M', width:tam, margin:1 }, function(err){
+    if(err){ alert('No se pudo generar el QR: ' + err); return; }
+    // El QR salió bien: ahora sí construimos la tarjeta.
+    const cell = document.createElement('div'); cell.className='qrcell';
+    const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
+    x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
+    cell.appendChild(canvas);
+    const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
+    const meta = document.createElement('div'); meta.className='meta';
+    meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+    cell.appendChild(meta);
+    $('qrGrid').appendChild(cell);
 
-  new QRCode(q,{text:contenido,width:tam,height:tam,correctLevel:QRCode.CorrectLevel.H});
-
-  // limpia el formulario para la siguiente unidad
-  $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
-  $('q_placa').focus();
+    // Limpia los campos para la siguiente unidad.
+    $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
+    $('q_placa').focus();
+  });
 }
 function limpiarQR(){ $('qrGrid').innerHTML=''; }
+// Enter en cualquier campo agrega la unidad
+['q_placa','q_piloto','q_color','q_unidad'].forEach(id=>{
+  $(id).addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); agregarQR(); } });
+});
 
 // init
 $('umbral').value = localStorage.getItem('umbral') || 90;
