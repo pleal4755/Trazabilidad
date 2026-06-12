@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Descarga · Planta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{--accent:#0f6e56;--accent-deep:#0a4d3c;--ink:#18211d;--muted:#5f6b66;--line:#dfe3df;--bg:#eceeec}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;max-width:460px;margin:0 auto;min-height:100vh}
+  .estacion{background:var(--accent);color:#fff;padding:16px 18px;display:flex;align-items:center;gap:12px}
+  .estacion .glyph{width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center}
+  .estacion h1{font-family:"Space Grotesk",sans-serif;font-size:1.25rem;font-weight:700;margin:0;letter-spacing:-.01em}
+  .estacion p{margin:0;font-size:.74rem;text-transform:uppercase;letter-spacing:.14em;opacity:.85}
+  .cont{padding:16px}
+  input{width:100%;padding:13px;font-size:1rem;border:1px solid var(--line);border-radius:10px;font-family:inherit}
+  #reader{width:100%;border-radius:14px;overflow:hidden;background:#000;margin-top:12px}
+  .btn{width:100%;font-family:inherit;font-size:1.05rem;font-weight:500;border:0;border-radius:12px;padding:16px;margin-top:12px;cursor:pointer;color:#fff;background:var(--accent)}
+  .btn.sec{background:#e7e5dd;color:var(--ink)}
+  .fila{display:flex;gap:8px;margin-top:12px}
+  .fila input{flex:1}
+  .fila .btn{width:auto;margin-top:0;padding:13px 18px}
+  #res{margin-top:14px;padding:15px;border-radius:12px;font-size:1.05rem;font-weight:500;background:#f1efe8;min-height:1.2em}
+  #res.ok{background:#e1f1ea;color:var(--accent-deep)}
+  #res.err{background:#fcebeb;color:#a32d2d}
+  .barra{display:flex;justify-content:space-between;align-items:baseline;margin-top:16px;font-size:.85rem;color:var(--muted)}
+  .barra b{font-family:"Space Grotesk",sans-serif;font-size:1.5rem;color:var(--ink)}
+  #pend{color:#993c1d}
+  .oculto{display:none}
+  button:focus-visible{outline:3px solid var(--accent-deep);outline-offset:2px}
+</style>
+</head>
+<body>
+  <div class="estacion">
+    <span class="glyph" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M5 20V9l5-3 5 3v11M9 20v-5h2v5"/></svg></span>
+    <div><h1>Descarga</h1><p>Planta · registra ingreso</p></div>
+  </div>
+
+  <div class="cont">
+    <input id="usuario" placeholder="Tu nombre (se guarda)">
+    <div id="reader"></div>
+    <button id="btnEsc" class="btn">Escanear placa</button>
+    <button id="btnDet" class="btn sec oculto">Detener</button>
+    <div class="fila">
+      <input id="manual" placeholder="O escribe la placa">
+      <button class="btn sec" onclick="registrarManual()">OK</button>
+    </div>
+    <div id="res">Apunta la cámara al QR de la placa.</div>
+    <div class="barra"><span>En ruta ahora: <b id="enRuta">—</b></span><span id="pend"></span></div>
+    <button class="btn sec" onclick="sincronizar()">Sincronizar pendientes</button>
+  </div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
+const ACCION = 'ingreso';       // ← este programa SOLO registra ingresos (descarga en planta)
+const COLA = 'cola_ingreso';
+
+const $=id=>document.getElementById(id);
+const lector=new Html5Qrcode("reader");
+$('usuario').value=localStorage.getItem('usuario')||'';
+$('usuario').addEventListener('change',e=>localStorage.setItem('usuario',e.target.value));
+
+$('btnEsc').onclick=()=>{
+  lector.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},
+    placa=>{detener();enviar(placa);},()=>{})
+   .then(()=>{$('btnEsc').classList.add('oculto');$('btnDet').classList.remove('oculto');})
+   .catch(err=>mostrar(false,'No abrió la cámara (¿permiso? ¿HTTPS?): '+err));
+};
+$('btnDet').onclick=detener;
+function detener(){lector.stop().then(()=>{$('btnDet').classList.add('oculto');$('btnEsc').classList.remove('oculto');}).catch(()=>{});}
+function registrarManual(){const p=$('manual').value.trim();if(p){enviar(p);$('manual').value='';}}
+
+function leerQR(texto){
+  try{ const d=JSON.parse(texto); if(d&&d.placa) return String(d.placa).trim().toUpperCase(); }catch(e){}
+  return String(texto).trim().toUpperCase();
+}
+function enviar(entrada){
+  const placa=leerQR(entrada);
+  const reg={accion:ACCION,placa:placa,usuario:$('usuario').value,t:Date.now()};
+  mostrar(null,'Enviando '+placa+' …');
+  postear(reg).then(r=>{
+    if(r.ok){mostrar(true,'Ingreso registrado · '+placa+(r.minutos!==undefined?' ('+r.minutos+' min en ruta)':''));$('enRuta').textContent=r.en_ruta;beep();vibra();}
+    else mostrar(false,r.msg);
+  }).catch(()=>{encolar(reg);mostrar(false,'Sin conexión. Guardado para sincronizar.');});
+}
+function postear(reg){
+  return fetch(API,{method:'POST',body:JSON.stringify(reg),headers:{'Content-Type':'text/plain'}}).then(r=>r.json());
+}
+function colaGet(){return JSON.parse(localStorage.getItem(COLA)||'[]');}
+function colaSet(c){localStorage.setItem(COLA,JSON.stringify(c));$('pend').textContent=c.length?('Pendientes: '+c.length):'';}
+function encolar(reg){const c=colaGet();c.push(reg);colaSet(c);}
+async function sincronizar(){
+  let c=colaGet();if(!c.length){mostrar(null,'No hay pendientes.');return;}
+  const quedan=[];
+  for(const reg of c){try{const r=await postear(reg);if(!r.ok&&!/ya tiene|no hay viaje/i.test(r.msg))quedan.push(reg);}catch(e){quedan.push(reg);}}
+  colaSet(quedan);mostrar(quedan.length?false:true,quedan.length?('Faltan '+quedan.length):'Pendientes sincronizados.');refrescar();
+}
+function refrescar(){fetch(API+'?accion=en_ruta').then(r=>r.json()).then(r=>{if(r.ok)$('enRuta').textContent=r.en_ruta_count;}).catch(()=>{});}
+function mostrar(ok,t){const e=$('res');e.textContent=t;e.className=ok===true?'ok':ok===false?'err':'';}
+function vibra(){if(navigator.vibrate)navigator.vibrate(120);}
+function beep(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.frequency.value=880;o.connect(g);g.connect(c.destination);o.start();g.gain.setValueAtTime(.2,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.15);o.stop(c.currentTime+.15);}catch(e){}}
+window.addEventListener('online',sincronizar);
+colaSet(colaGet());refrescar();
+</script>
+</body>
+</html>

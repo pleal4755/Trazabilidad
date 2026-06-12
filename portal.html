@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal · Trazabilidad muelle → planta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#eceeec; --surface:#ffffff; --line:#dfe3df; --ink:#18211d; --muted:#5f6b66;
+    --brand:#0f6e56; --brand-deep:#0a4d3c; --amber:#bd7714; --alert:#b3261e; --amber-soft:#f6ead4;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto;padding:18px 16px 40px}
+  h1,h2,.num{font-family:"Space Grotesk",sans-serif}
+  .mono{font-family:"JetBrains Mono",monospace}
+
+  .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand .glyph{width:34px;height:34px;border-radius:9px;background:var(--brand);display:flex;align-items:center;justify-content:center}
+  .brand h1{font-size:1.05rem;font-weight:700;margin:0;letter-spacing:-.01em}
+  .brand p{font-size:.72rem;color:var(--muted);margin:0;text-transform:uppercase;letter-spacing:.12em}
+  .live{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--brand)}
+  @media (prefers-reduced-motion:no-preference){ .dot{animation:pulse 2s ease-in-out infinite} }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;width:fit-content;margin-bottom:18px}
+  .tabs button{font-family:inherit;font-size:.9rem;border:0;background:transparent;color:var(--muted);padding:9px 18px;border-radius:9px;cursor:pointer}
+  .tabs button.activo{background:var(--brand);color:#fff;font-weight:500}
+  .tabs button:focus-visible{outline:2px solid var(--brand-deep);outline-offset:2px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+  .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .tile .label{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+  .tile .num{font-size:2.1rem;font-weight:700;line-height:1.1;margin-top:6px}
+  .tile.alerta .num{color:var(--alert)}
+
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;font-size:.85rem;color:var(--muted)}
+  .controls input[type=number]{width:74px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit}
+  .btn{font-family:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:9px;cursor:pointer}
+  .btn.prim{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn:focus-visible{outline:2px solid var(--brand-deep);outline-offset:2px}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .row{display:grid;grid-template-columns:1.1fr 1fr 2fr auto;gap:12px;align-items:center;padding:13px 18px;border-top:1px solid var(--line)}
+  .row.head{border-top:0;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .row .placa{font-weight:700;font-size:1rem}
+  .dur{font-family:"Space Grotesk",sans-serif;font-weight:500}
+  .meter{height:5px;border-radius:3px;background:#edefed;margin-top:7px;overflow:hidden}
+  .meter > span{display:block;height:100%;background:var(--amber);border-radius:3px;transition:width .4s}
+  .badge{justify-self:end;font-size:.74rem;font-weight:500;padding:4px 11px;border-radius:20px}
+  .badge.ok{color:var(--brand-deep);background:#e1f1ea}
+  .badge.tarde{color:#fff;background:var(--alert)}
+  .estado{padding:34px 18px;text-align:center;color:var(--muted);font-size:.92rem}
+  .estado.err{color:var(--alert)}
+
+  .qrform{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .qrform input{width:100%;padding:11px;font-size:1rem;border:1px solid var(--line);border-radius:9px;font-family:inherit}
+  #qrGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-top:18px}
+  .qrcell{border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;background:#fff;break-inside:avoid;position:relative}
+  .qrcell img,.qrcell canvas{margin:0 auto;display:block}
+  .qrcell .placa{margin-top:9px;font-family:"JetBrains Mono",monospace;font-weight:700;letter-spacing:1px;font-size:1.05rem}
+  .qrcell .meta{margin-top:3px;font-size:.82rem;color:var(--muted);line-height:1.35}
+  .qrcell .quitar{position:absolute;top:6px;right:8px;border:0;background:transparent;color:var(--alert);font-size:1.1rem;cursor:pointer}
+
+  .oculto{display:none}
+  @media (max-width:620px){
+    .stats{grid-template-columns:1fr 1fr}
+    .row{grid-template-columns:1fr 1fr;row-gap:4px}
+    .row .col-est{grid-column:1/-1}
+    .row.head{display:none}
+  }
+  @media print{
+    .noprint{display:none!important}
+    body{background:#fff}
+    .wrap{max-width:none;padding:0}
+    .qrcell{border-color:#000}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar noprint">
+    <div class="brand">
+      <span class="glyph" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18V8h13l5 5v5"/><circle cx="7.5" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg>
+      </span>
+      <div>
+        <h1>Trazabilidad</h1>
+        <p>Muelle → Planta</p>
+      </div>
+    </div>
+    <div class="live"><span class="dot"></span><span id="estadoLive">conectando…</span></div>
+  </div>
+
+  <div class="tabs noprint">
+    <button id="tabRuta" class="activo" onclick="verTab('ruta')">En ruta</button>
+    <button id="tabQR" onclick="verTab('qr')">Etiquetas QR</button>
+  </div>
+
+  <!-- ───── Vista: camiones en ruta ───── -->
+  <section id="vistaRuta">
+    <div class="stats">
+      <div class="tile"><div class="label">En ruta</div><div class="num" id="statEnRuta">—</div></div>
+      <div class="tile" id="tileDem"><div class="label">Demoradas</div><div class="num" id="statDem">—</div></div>
+      <div class="tile"><div class="label">Tiempo prom.</div><div class="num" id="statProm">—</div></div>
+    </div>
+
+    <div class="controls noprint">
+      <span>Umbral de demora: <input type="number" id="umbral" min="10" step="10" value="90"> min</span>
+      <button class="btn prim" onclick="cargarRuta()">Actualizar</button>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="auto" checked> auto cada 20s
+      </label>
+    </div>
+
+    <div class="panel">
+      <div class="row head"><span>Placa</span><span>Salió</span><span>En ruta</span><span class="col-est" style="justify-self:end">Estado</span></div>
+      <div id="cuerpoRuta"><div class="estado">Cargando…</div></div>
+    </div>
+  </section>
+
+  <!-- ───── Vista: generador de QR ───── -->
+  <section id="vistaQR" class="oculto">
+    <div class="noprint">
+      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Llena los datos de una unidad y agrégala. Puedes acumular varias y luego imprimirlas juntas. El QR lleva los cuatro datos.</p>
+      <div class="qrform">
+        <div><label>No. de placa</label><input id="q_placa" placeholder="P-123ABC"></div>
+        <div><label>Nombre del piloto</label><input id="q_piloto" placeholder="Juan Pérez"></div>
+        <div><label>Color</label><input id="q_color" placeholder="Rojo"></div>
+        <div><label>No. de unidad</label><input id="q_unidad" placeholder="07"></div>
+      </div>
+      <div class="controls" style="margin-top:12px">
+        <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
+        <button class="btn prim" onclick="agregarQR()">Agregar</button>
+        <button class="btn" onclick="window.print()">Imprimir</button>
+        <button class="btn" onclick="limpiarQR()">Limpiar todo</button>
+      </div>
+    </div>
+    <div id="qrGrid"></div>
+  </section>
+
+</div>
+
+<script>
+// ── CONFIG: pega aquí la URL /exec de tu Apps Script (la misma del backend) ──
+const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
+
+const $ = id => document.getElementById(id);
+let timer = null;
+
+function verTab(t){
+  $('vistaRuta').classList.toggle('oculto', t!=='ruta');
+  $('vistaQR').classList.toggle('oculto', t!=='qr');
+  $('tabRuta').classList.toggle('activo', t==='ruta');
+  $('tabQR').classList.toggle('activo', t==='qr');
+}
+
+// ── Monitor en ruta ──
+function fmtDur(min){
+  if(min<60) return min+' min';
+  const h=Math.floor(min/60), m=min%60;
+  return h+'h'+(m?(' '+m+'m'):'');
+}
+function fmtHora(iso){
+  const d=new Date(iso);
+  return d.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'});
+}
+
+async function cargarRuta(){
+  const umbral = parseInt($('umbral').value)||90;
+  localStorage.setItem('umbral', umbral);
+  try{
+    const r = await fetch(API+'?accion=en_ruta').then(x=>x.json());
+    if(!r.ok) throw new Error(r.msg||'respuesta inválida');
+    pintarRuta(r.unidades||[], umbral);
+    $('estadoLive').textContent = 'actualizado '+new Date().toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){
+    $('cuerpoRuta').innerHTML = '<div class="estado err">No se pudo conectar con la hoja. Revisa la URL del backend (constante API) y que la implementación esté como “Cualquier persona”.</div>';
+    $('estadoLive').textContent = 'sin conexión';
+  }
+}
+
+function pintarRuta(unidades, umbral){
+  const ahora = Date.now();
+  const filas = unidades.map(u=>{
+    const min = Math.max(0, Math.round((ahora - new Date(u.ts_salida).getTime())/60000));
+    return {placa:u.placa, salida:u.ts_salida, min};
+  }).sort((a,b)=>b.min-a.min); // más demorados arriba
+
+  const demoradas = filas.filter(f=>f.min>umbral).length;
+  const prom = filas.length ? Math.round(filas.reduce((s,f)=>s+f.min,0)/filas.length) : 0;
+
+  $('statEnRuta').textContent = filas.length;
+  $('statDem').textContent = demoradas;
+  $('tileDem').classList.toggle('alerta', demoradas>0);
+  $('statProm').textContent = filas.length ? fmtDur(prom) : '—';
+
+  if(!filas.length){
+    $('cuerpoRuta').innerHTML = '<div class="estado">No hay camiones en ruta. Las salidas que se escaneen en muelle aparecerán aquí.</div>';
+    return;
+  }
+
+  $('cuerpoRuta').innerHTML = filas.map(f=>{
+    const tarde = f.min>umbral;
+    const pct = Math.min(100, Math.round(f.min/umbral*100));
+    const color = tarde ? 'var(--alert)' : 'var(--amber)';
+    return `<div class="row">
+      <span class="placa mono">${f.placa}</span>
+      <span class="mono" style="color:var(--muted)">${fmtHora(f.salida)}</span>
+      <span>
+        <span class="dur">${fmtDur(f.min)}</span>
+        <span class="meter"><span style="width:${pct}%;background:${color}"></span></span>
+      </span>
+      <span class="col-est">${tarde?'<span class="badge tarde">Demorada</span>':'<span class="badge ok">En ruta</span>'}</span>
+    </div>`;
+  }).join('');
+}
+
+function tick(){ if($('auto').checked) cargarRuta(); }
+
+// ── Generador de QR (uno por uno; el QR lleva los 4 datos en JSON; nivel H para durabilidad) ──
+function agregarQR(){
+  const placa  = $('q_placa').value.trim().toUpperCase();
+  const piloto = $('q_piloto').value.trim();
+  const color  = $('q_color').value.trim();
+  const unidad = $('q_unidad').value.trim();
+  if(!placa){ alert('La placa es obligatoria.'); return; }
+
+  const tam = parseInt($('tam').value)||180;
+  // El QR codifica un JSON. La app de campo lee la placa de aquí y guarda el resto.
+  const contenido = JSON.stringify({ placa, piloto, color, unidad });
+
+  const cell = document.createElement('div'); cell.className='qrcell';
+  const x = document.createElement('button'); x.className='quitar'; x.textContent='×';
+  x.title='Quitar'; x.onclick=()=>cell.remove(); cell.appendChild(x);
+  const q = document.createElement('div'); cell.appendChild(q);
+  const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
+  const meta = document.createElement('div'); meta.className='meta';
+  meta.innerHTML = [piloto, color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+  cell.appendChild(meta);
+  $('qrGrid').appendChild(cell);
+
+  new QRCode(q,{text:contenido,width:tam,height:tam,correctLevel:QRCode.CorrectLevel.H});
+
+  // limpia el formulario para la siguiente unidad
+  $('q_placa').value=''; $('q_piloto').value=''; $('q_color').value=''; $('q_unidad').value='';
+  $('q_placa').focus();
+}
+function limpiarQR(){ $('qrGrid').innerHTML=''; }
+
+// init
+$('umbral').value = localStorage.getItem('umbral') || 90;
+cargarRuta();
+timer = setInterval(tick, 20000);
+</script>
+</body>
+</html>
