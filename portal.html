@@ -134,7 +134,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
     <div class="noprint" style="margin-top:22px;text-align:right">
       <button class="btn danger" onclick="resetearBase()">Reiniciar para nuevo barco</button>
-      <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Borra los viajes actuales para empezar de cero. Pide clave. No borra la bitácora de auditoría.</p>
+      <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Borra los viajes Y la bitácora para empezar completamente de cero. Pide clave.</p>
     </div>
   </section>
 
@@ -235,9 +235,9 @@ function tick(){ if($('auto').checked) cargarRuta(); }
 
 // ── Reinicio para nuevo barco (pide clave; el backend la valida) ──
 function resetearBase(){
-  const clave = prompt('Escribe la clave para BORRAR los viajes y reiniciar.\n(Esto NO borra la bitácora de auditoría.)');
+  const clave = prompt('Escribe la clave para BORRAR los viajes y la bitácora, y reiniciar.\n(Esto borra TODO el historial para empezar de cero.)');
   if(clave===null || clave.trim()==='') return;
-  if(!confirm('¿Seguro? Se borrarán todos los viajes actuales para empezar de cero.')) return;
+  if(!confirm('¿Seguro? Se borrarán todos los viajes Y la bitácora de auditoría. Esta acción no se puede deshacer.')) return;
   fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
     body: JSON.stringify({ accion:'reset', clave:clave.trim(), usuario:'portal' }) })
     .then(r=>r.json())
