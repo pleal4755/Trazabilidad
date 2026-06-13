@@ -48,6 +48,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .controls input[type=number]{width:74px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-family:inherit}
   .btn{font-family:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:9px;cursor:pointer}
   .btn.prim{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn.danger{background:#fff;color:var(--alert);border-color:var(--alert)}
+  .btn.danger:hover{background:var(--alert);color:#fff}
   .btn:focus-visible{outline:2px solid var(--brand-deep);outline-offset:2px}
 
   .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
@@ -128,6 +130,11 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     <div class="panel">
       <div class="row head"><span>Placa</span><span>Salió</span><span>En ruta</span><span class="col-est" style="justify-self:end">Estado</span></div>
       <div id="cuerpoRuta"><div class="estado">Cargando…</div></div>
+    </div>
+
+    <div class="noprint" style="margin-top:22px;text-align:right">
+      <button class="btn danger" onclick="resetearBase()">Reiniciar para nuevo barco</button>
+      <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Borra los viajes actuales para empezar de cero. Pide clave. No borra la bitácora de auditoría.</p>
     </div>
   </section>
 
@@ -225,6 +232,19 @@ function pintarRuta(unidades, umbral){
 }
 
 function tick(){ if($('auto').checked) cargarRuta(); }
+
+// ── Reinicio para nuevo barco (pide clave; el backend la valida) ──
+function resetearBase(){
+  const clave = prompt('Escribe la clave para BORRAR los viajes y reiniciar.\n(Esto NO borra la bitácora de auditoría.)');
+  if(clave===null || clave.trim()==='') return;
+  if(!confirm('¿Seguro? Se borrarán todos los viajes actuales para empezar de cero.')) return;
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'reset', clave:clave.trim(), usuario:'portal' }) })
+    .then(r=>r.json())
+    .then(r=>{ if(r.ok){ alert('Base reiniciada. Listo para el nuevo barco.'); cargarRuta(); }
+               else alert(r.msg || 'No se pudo reiniciar.'); })
+    .catch(()=>alert('Error de conexión.'));
+}
 
 // ── Generador de QR por lote (el QR lleva placa, color y unidad en JSON) ──
 function generarLista(){
