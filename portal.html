@@ -173,8 +173,17 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
   <!-- ───── Vista: asignación de GPS ───── -->
   <section id="vistaGps" class="oculto noprint">
-    <p style="color:var(--muted);font-size:.9rem;margin-top:0">Asigna o cambia el número de GPS por placa. Como los GPS rotan durante la descarga, puedes actualizarlos aquí cuando quieras: el monitor de camiones en ruta toma el valor más reciente.</p>
-    <div class="qrform">
+    <p style="color:var(--muted);font-size:.9rem;margin-top:0">Asigna o cambia el número de GPS por placa. Como los GPS rotan durante la descarga, puedes actualizarlos cuando quieras: el monitor toma el valor más reciente.</p>
+
+    <label style="display:block;font-size:.8rem;color:var(--ink);font-weight:600">Cargar lista (una por línea: placa, GPS)</label>
+    <textarea id="gpsLista" class="qrtext" style="margin-top:6px" placeholder="P-123ABC, GPS-1145&#10;C-456DEF, GPS-2231&#10;P-789GHI, GPS-3098"></textarea>
+    <div class="controls" style="margin-top:10px">
+      <button class="btn prim" onclick="guardarGpsLista()">Guardar lista</button>
+    </div>
+    <div id="gpsListaAviso" style="margin:4px 0 18px;font-size:.85rem;color:var(--muted)"></div>
+
+    <label style="display:block;font-size:.8rem;color:var(--ink);font-weight:600">Actualizar o cambiar un GPS</label>
+    <div class="qrform" style="margin-top:6px">
       <div><label>Placa</label><input id="g_placa" placeholder="P-123ABC"></div>
       <div><label>Número de GPS</label><input id="g_gps" placeholder="GPS-1145"></div>
     </div>
@@ -357,6 +366,18 @@ function borrarGps(placa){
   fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
     body: JSON.stringify({ accion:'del_gps', placa }) })
     .then(r=>r.json()).then(()=>cargarGps()).catch(()=>{});
+}
+function guardarGpsLista(){
+  const lineas = $('gpsLista').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lineas.length){ $('gpsListaAviso').textContent='Pega al menos una línea.'; $('gpsListaAviso').style.color='var(--alert)'; return; }
+  const lista = [];
+  lineas.forEach(l=>{ const p=l.split(/[,\t;]/).map(s=>s.trim()); if(p[0]) lista.push({placa:p[0].toUpperCase(), gps:p[1]||''}); });
+  $('gpsListaAviso').textContent='Guardando…'; $('gpsListaAviso').style.color='var(--muted)';
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'set_gps_lote', lista }) })
+    .then(r=>r.json())
+    .then(r=>{ $('gpsListaAviso').textContent=r.msg||'Listo'; $('gpsLista').value=''; cargarGps(); })
+    .catch(()=>{ $('gpsListaAviso').textContent='Error de conexión.'; $('gpsListaAviso').style.color='var(--alert)'; });
 }
 
 // ── Cerrojo de entrada al portal ──
