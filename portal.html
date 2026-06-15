@@ -63,6 +63,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .row.head{border-top:0;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
   .row .placa{font-weight:700;font-size:1rem}
   .dur{font-family:"Space Grotesk",sans-serif;font-weight:500}
+  .subinfo{font-family:Inter,sans-serif;font-weight:400;font-size:.76rem;color:var(--muted);letter-spacing:0}
   .meter{height:5px;border-radius:3px;background:#edefed;margin-top:7px;overflow:hidden}
   .meter > span{display:block;height:100%;background:var(--amber);border-radius:3px;transition:width .4s}
   .badge{justify-self:end;font-size:.74rem;font-weight:500;padding:4px 11px;border-radius:20px}
@@ -156,8 +157,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <!-- ───── Vista: generador de QR ───── -->
   <section id="vistaQR" class="oculto">
     <div class="noprint">
-      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, con los datos separados por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El QR lleva los tres datos.</p>
-      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07&#10;C-456DEF, Azul, 12&#10;P-789GHI, Blanco, 03"></textarea>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad, GPS</b>. El número de GPS no se imprime en la etiqueta, pero viaja en el QR para mostrarse en el monitor de camiones en ruta. También puedes pegar directo desde Excel (cuatro columnas).</p>
+      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07, GPS-1145&#10;C-456DEF, Azul, 12, GPS-2231&#10;P-789GHI, Blanco, 03, GPS-3098"></textarea>
       <div class="controls" style="margin-top:12px">
         <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
         <button class="btn prim" onclick="generarLista()">Generar todos</button>
@@ -216,7 +217,7 @@ function pintarRuta(unidades, umbral){
   const ahora = Date.now();
   const filas = unidades.map(u=>{
     const min = Math.max(0, Math.round((ahora - new Date(u.ts_salida).getTime())/60000));
-    return {placa:u.placa, salida:u.ts_salida, min};
+    return {placa:u.placa, salida:u.ts_salida, min, gps:u.gps||'', unidad:u.unidad||'', color:u.color||''};
   }).sort((a,b)=>b.min-a.min); // más demorados arriba
 
   const demoradas = filas.filter(f=>f.min>umbral).length;
@@ -236,8 +237,9 @@ function pintarRuta(unidades, umbral){
     const tarde = f.min>umbral;
     const pct = Math.min(100, Math.round(f.min/umbral*100));
     const color = tarde ? 'var(--alert)' : 'var(--amber)';
+    const sub = [f.unidad?('Unidad '+f.unidad):'', f.gps?('GPS '+f.gps):''].filter(Boolean).join(' · ');
     return `<div class="row">
-      <span class="placa mono">${f.placa}</span>
+      <span class="placa mono">${f.placa}${sub?('<br><span class="subinfo">'+sub+'</span>'):''}</span>
       <span class="mono" style="color:var(--muted)">${fmtHora(f.salida)}</span>
       <span>
         <span class="dur">${fmtDur(f.min)}</span>
@@ -278,9 +280,10 @@ function generarLista(){
     const placa  = (p[0]||'').toUpperCase();
     const color  = p[1]||'';
     const unidad = p[2]||'';
+    const gps    = p[3]||'';
     if(!placa){ errores.push('Línea '+(i+1)+': sin placa'); return; }
 
-    const contenido = JSON.stringify({ placa, color, unidad });
+    const contenido = JSON.stringify({ placa, color, unidad, gps }); // gps va en el QR, no en la etiqueta
     const q = document.createElement('div');
     try { new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M }); }
     catch(e){ errores.push('Línea '+(i+1)+' ('+placa+'): '+e); return; }
@@ -289,7 +292,7 @@ function generarLista(){
     cell.appendChild(q);
     const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
     const meta = document.createElement('div'); meta.className='meta';
-    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>'); // sin GPS
     cell.appendChild(meta);
     $('qrGrid').appendChild(cell);
     ok++;
