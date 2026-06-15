@@ -76,14 +76,14 @@ function detener(){lector.stop().then(()=>{$('btnDet').classList.add('oculto');$
 function registrarManual(){const p=$('manual').value.trim();if(p){enviar(p);$('manual').value='';}}
 
 function leerQR(texto){
-  // El QR puede traer JSON {placa,piloto,color,unidad} o solo la placa.
+  // El QR puede traer JSON {placa,piloto,color,unidad,gps} o solo la placa.
   try{ const d=JSON.parse(texto); if(d&&d.placa)
-    return {placa:String(d.placa).trim().toUpperCase(),piloto:d.piloto||'',color:d.color||'',unidad:d.unidad||''}; }catch(e){}
-  return {placa:String(texto).trim().toUpperCase(),piloto:'',color:'',unidad:''};
+    return {placa:String(d.placa).trim().toUpperCase(),piloto:d.piloto||'',color:d.color||'',unidad:d.unidad||'',gps:d.gps||''}; }catch(e){}
+  return {placa:String(texto).trim().toUpperCase(),piloto:'',color:'',unidad:'',gps:''};
 }
 function enviar(entrada){
   const u=leerQR(entrada);
-  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,usuario:$('usuario').value,t:Date.now()};
+  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,gps:u.gps,usuario:$('usuario').value,t:Date.now()};
   mostrar(null,'Enviando '+u.placa+' …');
   postear(reg).then(r=>{
     if(r.ok){mostrar(true,'Salida registrada · '+u.placa);$('enRuta').textContent=r.en_ruta;beep();vibra();}
