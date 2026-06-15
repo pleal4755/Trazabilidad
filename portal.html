@@ -125,6 +125,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <div class="tabs noprint">
     <button id="tabRuta" class="activo" onclick="verTab('ruta')">En ruta</button>
     <button id="tabQR" onclick="verTab('qr')">Etiquetas QR</button>
+    <button id="tabGps" onclick="verTab('gps')">GPS</button>
   </div>
 
   <!-- ───── Vista: camiones en ruta ───── -->
@@ -157,8 +158,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <!-- ───── Vista: generador de QR ───── -->
   <section id="vistaQR" class="oculto">
     <div class="noprint">
-      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad, GPS</b>. El número de GPS no se imprime en la etiqueta, pero viaja en el QR para mostrarse en el monitor de camiones en ruta. También puedes pegar directo desde Excel (cuatro columnas).</p>
-      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07, GPS-1145&#10;C-456DEF, Azul, 12, GPS-2231&#10;P-789GHI, Blanco, 03, GPS-3098"></textarea>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El GPS se asigna aparte, en la pestaña GPS.</p>
+      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07&#10;C-456DEF, Azul, 12&#10;P-789GHI, Blanco, 03"></textarea>
       <div class="controls" style="margin-top:12px">
         <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
         <button class="btn prim" onclick="generarLista()">Generar todos</button>
@@ -168,6 +169,23 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       <div id="qrAviso" style="margin-top:10px;font-size:.85rem;color:var(--muted)"></div>
     </div>
     <div id="qrGrid"></div>
+  </section>
+
+  <!-- ───── Vista: asignación de GPS ───── -->
+  <section id="vistaGps" class="oculto noprint">
+    <p style="color:var(--muted);font-size:.9rem;margin-top:0">Asigna o cambia el número de GPS por placa. Como los GPS rotan durante la descarga, puedes actualizarlos aquí cuando quieras: el monitor de camiones en ruta toma el valor más reciente.</p>
+    <div class="qrform">
+      <div><label>Placa</label><input id="g_placa" placeholder="P-123ABC"></div>
+      <div><label>Número de GPS</label><input id="g_gps" placeholder="GPS-1145"></div>
+    </div>
+    <div class="controls" style="margin-top:12px">
+      <button class="btn prim" onclick="guardarGps()">Guardar / actualizar</button>
+    </div>
+    <div id="gpsAviso" style="margin:6px 0 12px;font-size:.85rem;color:var(--muted)"></div>
+    <div class="panel">
+      <div class="row head"><span>Placa</span><span>GPS</span><span class="col-est" style="justify-self:end">Acción</span></div>
+      <div id="cuerpoGps"><div class="estado">Cargando…</div></div>
+    </div>
   </section>
 
 </div>
@@ -184,8 +202,11 @@ let timer = null;
 function verTab(t){
   $('vistaRuta').classList.toggle('oculto', t!=='ruta');
   $('vistaQR').classList.toggle('oculto', t!=='qr');
+  $('vistaGps').classList.toggle('oculto', t!=='gps');
   $('tabRuta').classList.toggle('activo', t==='ruta');
   $('tabQR').classList.toggle('activo', t==='qr');
+  $('tabGps').classList.toggle('activo', t==='gps');
+  if(t==='gps') cargarGps();
 }
 
 // ── Monitor en ruta ──
@@ -280,10 +301,9 @@ function generarLista(){
     const placa  = (p[0]||'').toUpperCase();
     const color  = p[1]||'';
     const unidad = p[2]||'';
-    const gps    = p[3]||'';
     if(!placa){ errores.push('Línea '+(i+1)+': sin placa'); return; }
 
-    const contenido = JSON.stringify({ placa, color, unidad, gps }); // gps va en el QR, no en la etiqueta
+    const contenido = JSON.stringify({ placa, color, unidad });
     const q = document.createElement('div');
     try { new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M }); }
     catch(e){ errores.push('Línea '+(i+1)+' ('+placa+'): '+e); return; }
@@ -292,7 +312,7 @@ function generarLista(){
     cell.appendChild(q);
     const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
     const meta = document.createElement('div'); meta.className='meta';
-    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>'); // sin GPS
+    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
     cell.appendChild(meta);
     $('qrGrid').appendChild(cell);
     ok++;
@@ -302,6 +322,42 @@ function generarLista(){
 }
 function limpiarQR(){ $('qrGrid').innerHTML=''; avisoQR(''); }
 function avisoQR(t, err){ const e=$('qrAviso'); if(e){ e.textContent=t||''; e.style.color = err ? 'var(--alert)' : 'var(--muted)'; } }
+
+// ── Pestaña GPS: asignar/cambiar GPS por placa ──
+function cargarGps(){
+  fetch(API + '?accion=lista_gps').then(r=>r.json())
+    .then(r=>{ if(r.ok) pintarGps(r.lista||[]); else $('cuerpoGps').innerHTML='<div class="estado err">No se pudo cargar.</div>'; })
+    .catch(()=>{ $('cuerpoGps').innerHTML='<div class="estado err">Error de conexión. Revisa la URL del backend.</div>'; });
+}
+function pintarGps(lista){
+  if(!lista.length){ $('cuerpoGps').innerHTML='<div class="estado">Aún no hay GPS asignados.</div>'; return; }
+  $('cuerpoGps').innerHTML = lista.map(x=>`<div class="row" style="grid-template-columns:1.2fr 1.2fr auto">
+      <span class="placa mono">${x.placa}</span>
+      <span class="mono">${x.gps||'—'}</span>
+      <span class="col-est" style="justify-self:end">
+        <button class="btn" style="padding:5px 10px" onclick="editarGps('${x.placa}','${(x.gps||'').replace(/'/g,"")}')">Editar</button>
+        <button class="btn danger" style="padding:5px 10px" onclick="borrarGps('${x.placa}')">Quitar</button>
+      </span>
+    </div>`).join('');
+}
+function editarGps(placa, gps){ $('g_placa').value=placa; $('g_gps').value=gps; $('g_placa').focus(); }
+function guardarGps(){
+  const placa = $('g_placa').value.trim().toUpperCase();
+  const gps = $('g_gps').value.trim();
+  if(!placa){ $('gpsAviso').textContent='Escribe la placa.'; $('gpsAviso').style.color='var(--alert)'; return; }
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'set_gps', placa, gps }) })
+    .then(r=>r.json())
+    .then(r=>{ $('gpsAviso').textContent=r.msg||''; $('gpsAviso').style.color='var(--muted)';
+               $('g_placa').value=''; $('g_gps').value=''; cargarGps(); })
+    .catch(()=>{ $('gpsAviso').textContent='Error de conexión.'; $('gpsAviso').style.color='var(--alert)'; });
+}
+function borrarGps(placa){
+  if(!confirm('¿Quitar el GPS de '+placa+'?')) return;
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'del_gps', placa }) })
+    .then(r=>r.json()).then(()=>cargarGps()).catch(()=>{});
+}
 
 // ── Cerrojo de entrada al portal ──
 function recordar(){ try{ sessionStorage.setItem('portal_ok','1'); }catch(e){} }
