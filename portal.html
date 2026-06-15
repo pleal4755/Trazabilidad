@@ -50,6 +50,12 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .btn.prim{background:var(--brand);color:#fff;border-color:var(--brand)}
   .btn.danger{background:#fff;color:var(--alert);border-color:var(--alert)}
   .btn.danger:hover{background:var(--alert);color:#fff}
+  .cerrojo{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;padding:20px}
+  .cerrojo-box{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px;max-width:340px;width:100%;text-align:center}
+  .cerrojo-box h2{font-family:"Space Grotesk",sans-serif;margin:0 0 4px;font-size:1.2rem}
+  .cerrojo-box p{color:var(--muted);font-size:.88rem;margin:0 0 16px}
+  .cerrojo-box input{width:100%;padding:12px;font-size:1rem;border:1px solid var(--line);border-radius:9px;margin-bottom:12px;font-family:inherit}
+  #cerrojoErr{color:var(--alert);font-size:.85rem;margin-top:10px;min-height:1em}
   .btn:focus-visible{outline:2px solid var(--brand-deep);outline-offset:2px}
 
   .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
@@ -91,6 +97,15 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 </style>
 </head>
 <body>
+<div id="cerrojo" class="cerrojo">
+  <div class="cerrojo-box">
+    <h2>Portal de trazabilidad</h2>
+    <p>Ingresa la clave de acceso</p>
+    <input id="clavePortal" type="password" placeholder="Clave" autocomplete="off">
+    <button class="btn prim" onclick="entrarPortal()">Entrar</button>
+    <div id="cerrojoErr"></div>
+  </div>
+</div>
 <div class="wrap">
 
   <div class="topbar noprint">
@@ -134,7 +149,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
     <div class="noprint" style="margin-top:22px;text-align:right">
       <button class="btn danger" onclick="resetearBase()">Reiniciar para nuevo barco</button>
-      <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Borra los viajes Y la bitácora para empezar completamente de cero. Pide clave.</p>
+      <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Archiva el historial del barco (viajes y bitácora) y luego reinicia para empezar de cero. Pide clave.</p>
     </div>
   </section>
 
@@ -159,6 +174,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 <script>
 // ── CONFIG: pega aquí la URL /exec de tu Apps Script (la misma del backend) ──
 const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
+// Clave para entrar al portal (disuasoria: es visible en el código fuente)
+const CLAVE_PORTAL = '8675309';
 
 const $ = id => document.getElementById(id);
 let timer = null;
@@ -235,13 +252,15 @@ function tick(){ if($('auto').checked) cargarRuta(); }
 
 // ── Reinicio para nuevo barco (pide clave; el backend la valida) ──
 function resetearBase(){
-  const clave = prompt('Escribe la clave para BORRAR los viajes y la bitácora, y reiniciar.\n(Esto borra TODO el historial para empezar de cero.)');
+  const clave = prompt('Clave para archivar y reiniciar:');
   if(clave===null || clave.trim()==='') return;
-  if(!confirm('¿Seguro? Se borrarán todos los viajes Y la bitácora de auditoría. Esta acción no se puede deshacer.')) return;
+  const barco = prompt('Nombre o identificador del barco (para guardar su historial):');
+  if(barco===null || barco.trim()==='') return;
+  if(!confirm('Se ARCHIVARÁ el historial del barco "'+barco.trim()+'" (viajes y bitácora) y luego se vaciarán para empezar de cero.\n¿Continuar?')) return;
   fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
-    body: JSON.stringify({ accion:'reset', clave:clave.trim(), usuario:'portal' }) })
+    body: JSON.stringify({ accion:'reset', clave:clave.trim(), barco:barco.trim(), usuario:'portal' }) })
     .then(r=>r.json())
-    .then(r=>{ if(r.ok){ alert('Base reiniciada. Listo para el nuevo barco.'); cargarRuta(); }
+    .then(r=>{ if(r.ok){ alert(r.msg); cargarRuta(); }
                else alert(r.msg || 'No se pudo reiniciar.'); })
     .catch(()=>alert('Error de conexión.'));
 }
@@ -281,10 +300,29 @@ function generarLista(){
 function limpiarQR(){ $('qrGrid').innerHTML=''; avisoQR(''); }
 function avisoQR(t, err){ const e=$('qrAviso'); if(e){ e.textContent=t||''; e.style.color = err ? 'var(--alert)' : 'var(--muted)'; } }
 
-// init
-$('umbral').value = localStorage.getItem('umbral') || 90;
-cargarRuta();
-timer = setInterval(tick, 20000);
+// ── Cerrojo de entrada al portal ──
+function recordar(){ try{ sessionStorage.setItem('portal_ok','1'); }catch(e){} }
+function yaEntro(){ try{ return sessionStorage.getItem('portal_ok')==='1'; }catch(e){ return false; } }
+
+function entrarPortal(){
+  if($('clavePortal').value === CLAVE_PORTAL){
+    recordar();
+    abrirPortal();
+  } else {
+    $('cerrojoErr').textContent = 'Clave incorrecta.';
+    $('clavePortal').value = '';
+  }
+}
+function abrirPortal(){
+  $('cerrojo').style.display = 'none';
+  $('umbral').value = localStorage.getItem('umbral') || 90;
+  cargarRuta();
+  timer = setInterval(tick, 20000);
+}
+$('clavePortal').addEventListener('keydown', e=>{ if(e.key==='Enter') entrarPortal(); });
+
+// Si ya entró en esta sesión, no volver a pedir la clave
+if(yaEntro()){ abrirPortal(); } else { $('clavePortal').focus(); }
 </script>
 </body>
 </html>
