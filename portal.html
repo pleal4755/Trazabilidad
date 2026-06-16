@@ -64,6 +64,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .row .placa{font-weight:700;font-size:1rem}
   .dur{font-family:"Space Grotesk",sans-serif;font-weight:500}
   .subinfo{font-family:Inter,sans-serif;font-weight:400;font-size:.76rem;color:var(--muted);letter-spacing:0}
+  .gpschip{display:inline-block;margin-top:5px;font-family:"JetBrains Mono",monospace;font-size:.75rem;font-weight:700;color:var(--brand-deep);background:#e1f1ea;padding:3px 9px;border-radius:6px;letter-spacing:.02em}
+  .gpschip.vacio{color:var(--muted);background:#f0efe9;font-weight:500}
   .meter{height:5px;border-radius:3px;background:#edefed;margin-top:7px;overflow:hidden}
   .meter > span{display:block;height:100%;background:var(--amber);border-radius:3px;transition:width .4s}
   .badge{justify-self:end;font-size:.74rem;font-weight:500;padding:4px 11px;border-radius:20px}
@@ -201,7 +203,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
 <script>
 // ── CONFIG: pega aquí la URL /exec de tu Apps Script (la misma del backend) ──
-const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
+const API = 'https://script.google.com/macros/s/AKfycbxWY3HbNJ3T5xt3EDWu_Hhqn8M2SzbxIL6JqlMj5Guyb8F4r_BfwIrmeNJUwg_ztU2d/exec';
 // Clave para entrar al portal (disuasoria: es visible en el código fuente)
 const CLAVE_PORTAL = '123123';
 
@@ -267,9 +269,10 @@ function pintarRuta(unidades, umbral){
     const tarde = f.min>umbral;
     const pct = Math.min(100, Math.round(f.min/umbral*100));
     const color = tarde ? 'var(--alert)' : 'var(--amber)';
-    const sub = [f.unidad?('Unidad '+f.unidad):'', f.gps?('GPS '+f.gps):''].filter(Boolean).join(' · ');
+    const sub = [f.unidad?('Unidad '+f.unidad):'', f.color].filter(Boolean).join(' · ');
+    const gpschip = f.gps ? ('<span class="gpschip">GPS '+f.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
     return `<div class="row">
-      <span class="placa mono">${f.placa}${sub?('<br><span class="subinfo">'+sub+'</span>'):''}</span>
+      <span class="placa mono">${f.placa}${sub?('<br><span class="subinfo">'+sub+'</span>'):''}<br>${gpschip}</span>
       <span class="mono" style="color:var(--muted)">${fmtHora(f.salida)}</span>
       <span>
         <span class="dur">${fmtDur(f.min)}</span>
