@@ -173,7 +173,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
       <span id="ingCount" style="color:var(--muted);font-size:.85rem"></span>
     </div>
     <div class="panel">
-      <div class="row head" style="grid-template-columns:1.2fr 1fr 1.1fr"><span>Placa</span><span>Hora de descarga</span><span>GPS</span></div>
+      <div class="row head" style="grid-template-columns:1.2fr 1fr 1.1fr"><span>Placa</span><span>Fecha y hora</span><span>GPS</span></div>
       <div id="cuerpoIng"><div class="estado">Cargando…</div></div>
     </div>
   </section>
@@ -257,9 +257,8 @@ function fmtHora(iso){
 function fmtFechaHora(iso){
   const d=new Date(iso);
   if(isNaN(d)) return '—';
-  const hora=fmtHora(iso);
-  if(d.toDateString()===new Date().toDateString()) return hora;
-  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+hora;
+  const dd=('0'+d.getDate()).slice(-2), mm=('0'+(d.getMonth()+1)).slice(-2);
+  return dd+'/'+mm+' '+fmtHora(iso);
 }
 
 async function cargarRuta(){
