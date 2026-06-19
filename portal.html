@@ -66,6 +66,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .subinfo{font-family:Inter,sans-serif;font-weight:400;font-size:.76rem;color:var(--muted);letter-spacing:0}
   .gpschip{display:inline-block;margin-top:5px;font-family:"JetBrains Mono",monospace;font-size:.75rem;font-weight:700;color:var(--brand-deep);background:#e1f1ea;padding:3px 9px;border-radius:6px;letter-spacing:.02em}
   .gpschip.vacio{color:var(--muted);background:#f0efe9;font-weight:500}
+  .controls select{font-family:inherit;font-size:.9rem;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
   .meter{height:5px;border-radius:3px;background:#edefed;margin-top:7px;overflow:hidden}
   .meter > span{display:block;height:100%;background:var(--amber);border-radius:3px;transition:width .4s}
   .badge{justify-self:end;font-size:.74rem;font-weight:500;padding:4px 11px;border-radius:20px}
@@ -126,6 +127,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 
   <div class="tabs noprint">
     <button id="tabRuta" class="activo" onclick="verTab('ruta')">En ruta</button>
+    <button id="tabIng" onclick="verTab('ingresadas')">Ingresadas</button>
     <button id="tabQR" onclick="verTab('qr')">Etiquetas QR</button>
     <button id="tabGps" onclick="verTab('gps')">GPS</button>
   </div>
@@ -154,6 +156,25 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     <div class="noprint" style="margin-top:22px;text-align:right">
       <button class="btn danger" onclick="resetearBase()">Reiniciar para nuevo barco</button>
       <p style="font-size:.78rem;color:var(--muted);margin:6px 0 0">Archiva el historial del barco (viajes y bitácora) y luego reinicia para empezar de cero. Pide clave.</p>
+    </div>
+  </section>
+
+  <!-- ───── Vista: unidades ingresadas (descargadas) ───── -->
+  <section id="vistaIng" class="oculto">
+    <div class="controls noprint">
+      <span>Ver:
+        <select id="filtroIng" onchange="pintarIngresadas()">
+          <option value="todas">Todas</option>
+          <option value="hora">Última hora</option>
+          <option value="ultimas10">Últimas 10</option>
+        </select>
+      </span>
+      <button class="btn prim" onclick="cargarIngresadas()">Actualizar</button>
+      <span id="ingCount" style="color:var(--muted);font-size:.85rem"></span>
+    </div>
+    <div class="panel">
+      <div class="row head" style="grid-template-columns:1.2fr 1fr 1.1fr"><span>Placa</span><span>Hora de descarga</span><span>GPS</span></div>
+      <div id="cuerpoIng"><div class="estado">Cargando…</div></div>
     </div>
   </section>
 
@@ -212,12 +233,15 @@ let timer = null;
 
 function verTab(t){
   $('vistaRuta').classList.toggle('oculto', t!=='ruta');
+  $('vistaIng').classList.toggle('oculto', t!=='ingresadas');
   $('vistaQR').classList.toggle('oculto', t!=='qr');
   $('vistaGps').classList.toggle('oculto', t!=='gps');
   $('tabRuta').classList.toggle('activo', t==='ruta');
+  $('tabIng').classList.toggle('activo', t==='ingresadas');
   $('tabQR').classList.toggle('activo', t==='qr');
   $('tabGps').classList.toggle('activo', t==='gps');
   if(t==='gps') cargarGps();
+  if(t==='ingresadas') cargarIngresadas();
 }
 
 // ── Monitor en ruta ──
@@ -229,6 +253,13 @@ function fmtDur(min){
 function fmtHora(iso){
   const d=new Date(iso);
   return d.toLocaleTimeString('es-GT',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtFechaHora(iso){
+  const d=new Date(iso);
+  if(isNaN(d)) return '—';
+  const hora=fmtHora(iso);
+  if(d.toDateString()===new Date().toDateString()) return hora;
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+hora;
 }
 
 async function cargarRuta(){
@@ -283,7 +314,40 @@ function pintarRuta(unidades, umbral){
   }).join('');
 }
 
-function tick(){ if($('auto').checked) cargarRuta(); }
+function tick(){
+  if($('auto').checked) cargarRuta();
+  if(!$('vistaIng').classList.contains('oculto')) cargarIngresadas();
+}
+
+// ── Pestaña Ingresadas (descargadas) ──
+let ingresadasCache = [];
+function cargarIngresadas(){
+  fetch(API + '?accion=ingresadas').then(r=>r.json())
+    .then(r=>{ if(r.ok){ ingresadasCache = r.lista||[]; pintarIngresadas(); }
+               else $('cuerpoIng').innerHTML='<div class="estado err">No se pudo cargar.</div>'; })
+    .catch(()=>{ $('cuerpoIng').innerHTML='<div class="estado err">Error de conexión.</div>'; });
+}
+function pintarIngresadas(){
+  let lista = ingresadasCache.slice();
+  lista.sort((a,b)=> new Date(b.ts_ingreso) - new Date(a.ts_ingreso)); // más reciente primero
+  const filtro = $('filtroIng').value;
+  if(filtro==='hora'){
+    const limite = Date.now() - 3600000;
+    lista = lista.filter(x=> new Date(x.ts_ingreso).getTime() >= limite);
+  } else if(filtro==='ultimas10'){
+    lista = lista.slice(0,10);
+  }
+  $('ingCount').textContent = lista.length + (lista.length===1?' unidad':' unidades');
+  if(!lista.length){ $('cuerpoIng').innerHTML='<div class="estado">Sin unidades para este filtro.</div>'; return; }
+  $('cuerpoIng').innerHTML = lista.map(x=>{
+    const gps = x.gps ? ('<span class="gpschip">GPS '+x.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
+    return `<div class="row" style="grid-template-columns:1.2fr 1fr 1.1fr">
+      <span class="placa mono">${x.placa}</span>
+      <span class="mono" style="color:var(--muted)">${fmtFechaHora(x.ts_ingreso)}</span>
+      <span>${gps}</span>
+    </div>`;
+  }).join('');
+}
 
 // ── Reinicio para nuevo barco (pide clave; el backend la valida) ──
 function resetearBase(){
