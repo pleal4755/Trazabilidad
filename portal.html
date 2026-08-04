@@ -252,8 +252,8 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
         <button class="btn" onclick="imprimirListado()">Imprimir listado</button>
       </div>
 
-      <p style="color:var(--muted);font-size:.9rem;margin-top:22px">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El GPS se asigna aparte, en la pestaña GPS.</p>
-      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07&#10;C-456DEF, Azul, 12&#10;P-789GHI, Blanco, 03"></textarea>
+      <p style="color:var(--muted);font-size:.9rem;margin-top:22px">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad, tipo</b> (tipo: <b>GONDOLA</b> o <b>PITUFO</b>). También puedes pegar directo desde Excel (cuatro columnas). El GPS se asigna aparte, en la pestaña GPS.</p>
+      <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07, GONDOLA&#10;C-456DEF, Azul, 12, PITUFO&#10;P-789GHI, Blanco, 03, GONDOLA"></textarea>
       <div class="controls" style="margin-top:12px">
         <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
         <button class="btn prim" onclick="generarLista()">Generar todos</button>
@@ -321,7 +321,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     <p style="margin:0 0 14px;color:#5f6b66;font-size:.85rem">Descarga en curso · <span id="listadoImprimirFecha"></span> · <b id="listadoImprimirTotal">0</b> unidades</p>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="text-align:left;border-bottom:2px solid #000">
-        <th style="padding:6px 8px">#</th><th style="padding:6px 8px">Placa</th><th style="padding:6px 8px">Color</th><th style="padding:6px 8px">Unidad</th>
+        <th style="padding:6px 8px">#</th><th style="padding:6px 8px">Placa</th><th style="padding:6px 8px">Color</th><th style="padding:6px 8px">Unidad</th><th style="padding:6px 8px">Tipo</th>
       </tr></thead>
       <tbody id="listadoImprimirCuerpo"></tbody>
     </table>
@@ -432,7 +432,7 @@ function pintarRuta(unidades, umbral){
   const filas = unidades.map(u=>{
     const min = Math.max(0, Math.round((ahora - new Date(u.ts_salida).getTime())/60000));
     return {placa:u.placa, salida:u.ts_salida, min, gps:u.gps||'', unidad:u.unidad||'', color:u.color||'',
-             ticket_numero:u.ticket_numero||'', ticket_color:u.ticket_color||''};
+             ticket_numero:u.ticket_numero||'', ticket_color:u.ticket_color||'', tipo:u.tipo||''};
   }).sort((a,b)=>b.min-a.min); // más demorados arriba
 
   const demoradas = filas.filter(f=>f.min>umbral).length;
@@ -452,7 +452,7 @@ function pintarRuta(unidades, umbral){
     const tarde = f.min>umbral;
     const pct = Math.min(100, Math.round(f.min/umbral*100));
     const color = tarde ? 'var(--alert)' : 'var(--amber)';
-    const sub = [f.unidad?('Unidad '+f.unidad):'', f.color].filter(Boolean).join(' · ');
+    const sub = [f.unidad?('Unidad '+f.unidad):'', f.color, f.tipo].filter(Boolean).join(' · ');
     const gpschip = f.gps ? ('<span class="gpschip">GPS '+f.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
     const tkchip = ticketChipHtml(f.ticket_numero, f.ticket_color);
     return `<div class="row">
@@ -611,7 +611,7 @@ function pintarIngresadas(){
     const gps = x.gps ? ('<span class="gpschip">GPS '+x.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
     const tkchip = ticketChipHtml(x.ticket_numero, x.ticket_color);
     return `<div class="row ing">
-      <span class="placa mono">${x.placa}</span>
+      <span class="placa mono">${x.placa}${x.tipo?('<br><span class="subinfo">'+x.tipo+'</span>'):''}</span>
       <span class="mono" style="color:var(--muted)">${x.unidad||'—'}</span>
       <span class="mono" style="color:var(--muted)">${fmtFechaHora(x.ts_ingreso)}</span>
       <span>${gps}${tkchip}</span>
@@ -641,15 +641,18 @@ function generarLista(){
   const lineas = $('lista').value.split('\n').map(l=>l.trim()).filter(Boolean);
   if(!lineas.length){ avisoQR('Pega al menos una unidad.', true); return; }
 
+  const TIPOS_VALIDOS = ['GONDOLA', 'PITUFO'];
   let ok=0; const errores=[]; const generados=[];
   lineas.forEach((linea, i)=>{
     const p = linea.split(/[,\t;]/).map(s=>s.trim());
     const placa  = (p[0]||'').toUpperCase();
     const color  = p[1]||'';
     const unidad = p[2]||'';
+    const tipo   = (p[3]||'').toUpperCase();
     if(!placa){ errores.push('Línea '+(i+1)+': sin placa'); return; }
+    if(!tipo || !TIPOS_VALIDOS.includes(tipo)){ errores.push('Línea '+(i+1)+' ('+placa+'): tipo debe ser GONDOLA o PITUFO'); return; }
 
-    const contenido = JSON.stringify({ placa, color, unidad });
+    const contenido = JSON.stringify({ placa, color, unidad, tipo });
     const q = document.createElement('div');
     try { new QRCode(q, { text: contenido, width: tam, height: tam, correctLevel: QRCode.CorrectLevel.M }); }
     catch(e){ errores.push('Línea '+(i+1)+' ('+placa+'): '+e); return; }
@@ -658,11 +661,11 @@ function generarLista(){
     cell.appendChild(q);
     const rotPlaca = document.createElement('div'); rotPlaca.className='placa'; rotPlaca.textContent=placa; cell.appendChild(rotPlaca);
     const meta = document.createElement('div'); meta.className='meta';
-    meta.innerHTML = [color, unidad?('Unidad '+unidad):''].filter(Boolean).join('<br>');
+    meta.innerHTML = [color, unidad?('Unidad '+unidad):'', tipo].filter(Boolean).join('<br>');
     cell.appendChild(meta);
     $('qrGrid').appendChild(cell);
     ok++;
-    generados.push({placa, color, unidad});
+    generados.push({placa, color, unidad, tipo});
   });
 
   avisoQR(ok+' QR generados.' + (errores.length ? ('  Con problema: '+errores.join(' · ')) : ''), errores.length>0);
@@ -690,7 +693,8 @@ function imprimirListado(){
     if(!lista.length){ alert('Aún no hay unidades con QR generado para esta descarga.'); return; }
     $('listadoImprimirCuerpo').innerHTML = lista.map((x,i)=>
       '<tr><td style="padding:5px 8px">'+(i+1)+'</td><td class="mono" style="padding:5px 8px">'+x.placa+'</td>'+
-      '<td style="padding:5px 8px">'+(x.color||'—')+'</td><td style="padding:5px 8px">'+(x.unidad||'—')+'</td></tr>'
+      '<td style="padding:5px 8px">'+(x.color||'—')+'</td><td style="padding:5px 8px">'+(x.unidad||'—')+'</td>'+
+      '<td style="padding:5px 8px">'+(x.tipo||'—')+'</td></tr>'
     ).join('');
     $('listadoImprimirTotal').textContent = lista.length;
     $('listadoImprimirFecha').textContent = new Date().toLocaleString('es-GT');
