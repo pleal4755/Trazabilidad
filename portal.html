@@ -106,6 +106,14 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   .qrcell .meta{margin-top:3px;font-size:.82rem;color:var(--muted);line-height:1.35}
   .qrcell .quitar{position:absolute;top:6px;right:8px;border:0;background:transparent;color:var(--alert);font-size:1.1rem;cursor:pointer}
 
+  .colorConfig{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 4px}
+  .colorToggle{width:46px;height:46px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;opacity:.35;position:relative}
+  .colorToggle.act{opacity:1;box-shadow:0 0 0 3px var(--brand-deep)}
+  .colorToggle.act::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+  .colorToggle.clara.act::after{color:#18211d;text-shadow:none}
+  .ticketchip{display:inline-flex;align-items:center;gap:5px;margin-top:5px;margin-left:6px;font-family:"JetBrains Mono",monospace;font-size:.75rem;font-weight:700;padding:3px 9px;border-radius:6px;color:#fff}
+  .ticketchip.clara{color:#18211d}
+
   .oculto{display:none}
   @media (max-width:620px){
     .stats{grid-template-columns:1fr 1fr}
@@ -118,6 +126,13 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     body{background:#fff}
     .wrap{max-width:none;padding:0}
     .qrcell{border-color:#000}
+  }
+
+  #listadoImprimirWrap{display:none}
+  #listadoImprimirWrap td, #listadoImprimirWrap th{border-bottom:1px solid #ccc}
+  @media print{
+    body.imprimiendo-listado .wrap > *{display:none!important}
+    body.imprimiendo-listado #listadoImprimirWrap{display:block!important}
   }
 </style>
 </head>
@@ -185,6 +200,7 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <section id="vistaMapa" class="oculto noprint">
     <div class="controls noprint">
       <button class="btn prim" onclick="cargarMapa()">Actualizar</button>
+      <button class="btn" onclick="centrarMapa()">Centrar</button>
       <button class="btn" id="btnTodos" onclick="toggleTodos()">Ver todos los equipos</button>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="autoMapa" checked> auto cada 20s
@@ -222,7 +238,21 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
   <!-- ───── Vista: generador de QR ───── -->
   <section id="vistaQR" class="oculto">
     <div class="noprint">
-      <p style="color:var(--muted);font-size:.9rem;margin-top:0">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El GPS se asigna aparte, en la pestaña GPS.</p>
+      <label style="display:block;font-size:.92rem;color:var(--ink);font-weight:700">Colores de ticket para esta descarga</label>
+      <p style="color:var(--muted);font-size:.85rem;margin:4px 0 0">Marca los colores de ticket que se van a usar en esta descarga. Al escanear en el muelle (Carga), el operario solo podrá elegir entre estos colores.</p>
+      <div id="colorConfig" class="colorConfig"></div>
+      <div class="controls" style="margin-top:2px">
+        <button class="btn prim" onclick="guardarColoresTicket()">Guardar colores</button>
+        <span id="colorConfigAviso" style="font-size:.85rem;color:var(--muted)"></span>
+      </div>
+
+      <div style="margin:22px 0 0;padding-top:14px;border-top:2px solid var(--line)">
+        <label style="display:block;font-size:.92rem;color:var(--ink);font-weight:700">Listado de unidades para imprimir</label>
+        <p style="color:var(--muted);font-size:.85rem;margin:4px 0 10px">Imprime la lista completa de placas que ya tienen QR generado para esta descarga (guardada en la base de datos, no solo lo que ves en pantalla ahora).</p>
+        <button class="btn" onclick="imprimirListado()">Imprimir listado</button>
+      </div>
+
+      <p style="color:var(--muted);font-size:.9rem;margin-top:22px">Pega un listado, una unidad por línea, separado por coma: <b>placa, color, unidad</b>. También puedes pegar directo desde Excel (tres columnas). El GPS se asigna aparte, en la pestaña GPS.</p>
       <textarea id="lista" class="qrtext" placeholder="P-123ABC, Rojo, 07&#10;C-456DEF, Azul, 12&#10;P-789GHI, Blanco, 03"></textarea>
       <div class="controls" style="margin-top:12px">
         <span>Tamaño: <input type="number" id="tam" min="120" max="320" step="10" value="180"> px</span>
@@ -286,6 +316,17 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
     </div>
   </section>
 
+  <div id="listadoImprimirWrap">
+    <h2 style="font-family:'Space Grotesk',sans-serif;margin:0 0 4px">Listado de unidades — QR generados</h2>
+    <p style="margin:0 0 14px;color:#5f6b66;font-size:.85rem">Descarga en curso · <span id="listadoImprimirFecha"></span> · <b id="listadoImprimirTotal">0</b> unidades</p>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="text-align:left;border-bottom:2px solid #000">
+        <th style="padding:6px 8px">#</th><th style="padding:6px 8px">Placa</th><th style="padding:6px 8px">Color</th><th style="padding:6px 8px">Unidad</th>
+      </tr></thead>
+      <tbody id="listadoImprimirCuerpo"></tbody>
+    </table>
+  </div>
+
 </div>
 
 <script>
@@ -293,6 +334,12 @@ var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this
 const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFkoaQw5_qxvw5mivWVMx9t7P7JJlUF2MDnHr9wO9YdXw/exec';
 // Clave para entrar al portal (disuasoria: es visible en el código fuente)
 const CLAVE_PORTAL = '123123';
+
+// Paleta de colores de ticket (nombre → color real). Debe coincidir con la de carga.html.
+const PALETA_COLORES = {Rojo:'#d92b2b',Azul:'#2563eb',Amarillo:'#eab308',Verde:'#16a34a',
+  Naranja:'#ea580c',Blanco:'#ffffff',Negro:'#111827',Celeste:'#38bdf8',Rosado:'#ec4899',Café:'#7c4a2b'};
+const COLORES_CLAROS = ['Blanco','Amarillo'];
+let coloresTicketSeleccion = [];
 
 const $ = id => document.getElementById(id);
 let timer = null;
@@ -308,9 +355,45 @@ function verTab(t){
   $('tabIng').classList.toggle('activo', t==='ingresadas');
   $('tabQR').classList.toggle('activo', t==='qr');
   $('tabGps').classList.toggle('activo', t==='gps');
-  if(t==='mapa') cargarMapa();
+  if(t==='mapa'){ _vistaFijada = false; cargarMapa(); }
   if(t==='gps'){ cargarGps(); cargarCustodios(); }
   if(t==='ingresadas') cargarIngresadas();
+  if(t==='qr') cargarConfigColores();
+}
+
+// ── Colores de ticket activos para la descarga actual ──
+function cargarConfigColores(){
+  fetch(API+'?accion=config').then(r=>r.json())
+    .then(r=>{ coloresTicketSeleccion = (r.ok && r.colores_ticket) ? r.colores_ticket : []; renderColorConfig(); })
+    .catch(()=>{ renderColorConfig(); });
+}
+function renderColorConfig(){
+  $('colorConfig').innerHTML = Object.keys(PALETA_COLORES).map(c=>{
+    const act = coloresTicketSeleccion.includes(c);
+    const clara = COLORES_CLAROS.includes(c);
+    return '<button type="button" class="colorToggle'+(act?' act':'')+(clara?' clara':'')+'" style="background:'+PALETA_COLORES[c]+'" data-color="'+c+'" onclick="toggleColorTicket(\''+c+'\')" title="'+c+'"></button>';
+  }).join('');
+}
+function toggleColorTicket(c){
+  const i = coloresTicketSeleccion.indexOf(c);
+  if(i>=0) coloresTicketSeleccion.splice(i,1); else coloresTicketSeleccion.push(c);
+  renderColorConfig();
+}
+function guardarColoresTicket(){
+  $('colorConfigAviso').style.color='var(--muted)'; $('colorConfigAviso').textContent='Guardando…';
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'set_colores_ticket', colores: coloresTicketSeleccion }) })
+    .then(r=>r.json())
+    .then(r=>{ $('colorConfigAviso').textContent = r.msg || 'Guardado.'; })
+    .catch(()=>{ $('colorConfigAviso').style.color='var(--alert)'; $('colorConfigAviso').textContent='Error de conexión.'; });
+}
+
+// Chip visual para mostrar el ticket capturado (número + color) en las tablas
+function ticketChipHtml(ticket_numero, ticket_color){
+  if(!ticket_numero) return '';
+  const hex = PALETA_COLORES[ticket_color] || '#7a8a84';
+  const clara = COLORES_CLAROS.includes(ticket_color) ? ' clara' : '';
+  return '<span class="ticketchip'+clara+'" style="background:'+hex+'">Ticket '+ticket_numero+(ticket_color?(' · '+ticket_color):'')+'</span>';
 }
 
 // ── Monitor en ruta ──
@@ -348,7 +431,8 @@ function pintarRuta(unidades, umbral){
   const ahora = Date.now();
   const filas = unidades.map(u=>{
     const min = Math.max(0, Math.round((ahora - new Date(u.ts_salida).getTime())/60000));
-    return {placa:u.placa, salida:u.ts_salida, min, gps:u.gps||'', unidad:u.unidad||'', color:u.color||''};
+    return {placa:u.placa, salida:u.ts_salida, min, gps:u.gps||'', unidad:u.unidad||'', color:u.color||'',
+             ticket_numero:u.ticket_numero||'', ticket_color:u.ticket_color||''};
   }).sort((a,b)=>b.min-a.min); // más demorados arriba
 
   const demoradas = filas.filter(f=>f.min>umbral).length;
@@ -370,8 +454,9 @@ function pintarRuta(unidades, umbral){
     const color = tarde ? 'var(--alert)' : 'var(--amber)';
     const sub = [f.unidad?('Unidad '+f.unidad):'', f.color].filter(Boolean).join(' · ');
     const gpschip = f.gps ? ('<span class="gpschip">GPS '+f.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
+    const tkchip = ticketChipHtml(f.ticket_numero, f.ticket_color);
     return `<div class="row">
-      <span class="placa mono">${f.placa}${sub?('<br><span class="subinfo">'+sub+'</span>'):''}<br>${gpschip}</span>
+      <span class="placa mono">${f.placa}${sub?('<br><span class="subinfo">'+sub+'</span>'):''}<br>${gpschip}${tkchip}</span>
       <span class="mono" style="color:var(--muted)">${fmtHora(f.salida)}</span>
       <span>
         <span class="dur">${fmtDur(f.min)}</span>
@@ -389,7 +474,7 @@ function tick(){
 }
 
 // ── Mapa de posiciones en vivo ──
-let _map=null, _markers=[], _todosMarkers=[], _verTodos=false, _codigosShown={};
+let _map=null, _markers=[], _todosMarkers=[], _verTodos=false, _codigosShown={}, _vistaFijada=false;
 
 const ICONO_CAMION = L.divIcon({className:'',html:'<div class="mk mk-truck">🚚</div>',iconSize:[30,30],iconAnchor:[15,30],popupAnchor:[0,-30]});
 const ICONO_CUSTODIO = L.divIcon({className:'',html:'<div class="mk mk-cust">🛡️</div>',iconSize:[30,30],iconAnchor:[15,30],popupAnchor:[0,-30]});
@@ -400,7 +485,10 @@ function initMapa(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
     maxZoom:19, attribution:'© OpenStreetMap'
   }).addTo(_map);
+  _map.on('zoomstart dragstart', ()=>{ _vistaFijada = true; }); // el usuario tomó control del mapa: ya no recentrar solo
 }
+// Vuelve a la vista general (todos los camiones/custodios) y libera la vista fijada por el usuario
+function centrarMapa(){ _vistaFijada = false; cargarMapa(); }
 function limpiarMarkers(){ _markers.forEach(m=>_map.removeLayer(m)); _markers=[]; }
 function limpiarTodos(){ _todosMarkers.forEach(m=>_map.removeLayer(m)); _todosMarkers=[]; }
 
@@ -462,8 +550,10 @@ function pintarMapa(unidades, custodios, sin){
     _markers.push(m); pts.push([c.lat,c.lng]);
     if(c.codigo) _codigosShown[String(c.codigo).toUpperCase()] = 1;
   });
-  if(pts.length===1) _map.setView(pts[0],13);
-  else if(pts.length>1) _map.fitBounds(pts,{padding:[40,40]});
+  if(!_vistaFijada){
+    if(pts.length===1) _map.setView(pts[0],13);
+    else if(pts.length>1) _map.fitBounds(pts,{padding:[40,40]});
+  }
 
   $('mapaSin').innerHTML = (sin&&sin.length)
     ? sin.map(s=>'<span class="pill"><b>'+s.placa+'</b> · '+s.motivo+'</span>').join('')
@@ -519,11 +609,12 @@ function pintarIngresadas(){
   if(!lista.length){ $('cuerpoIng').innerHTML='<div class="estado">Sin unidades para este filtro.</div>'; return; }
   $('cuerpoIng').innerHTML = lista.map(x=>{
     const gps = x.gps ? ('<span class="gpschip">GPS '+x.gps+'</span>') : '<span class="gpschip vacio">sin GPS</span>';
+    const tkchip = ticketChipHtml(x.ticket_numero, x.ticket_color);
     return `<div class="row ing">
       <span class="placa mono">${x.placa}</span>
       <span class="mono" style="color:var(--muted)">${x.unidad||'—'}</span>
       <span class="mono" style="color:var(--muted)">${fmtFechaHora(x.ts_ingreso)}</span>
-      <span>${gps}</span>
+      <span>${gps}${tkchip}</span>
     </div>`;
   }).join('');
 }
@@ -550,7 +641,7 @@ function generarLista(){
   const lineas = $('lista').value.split('\n').map(l=>l.trim()).filter(Boolean);
   if(!lineas.length){ avisoQR('Pega al menos una unidad.', true); return; }
 
-  let ok=0; const errores=[];
+  let ok=0; const errores=[]; const generados=[];
   lineas.forEach((linea, i)=>{
     const p = linea.split(/[,\t;]/).map(s=>s.trim());
     const placa  = (p[0]||'').toUpperCase();
@@ -571,12 +662,43 @@ function generarLista(){
     cell.appendChild(meta);
     $('qrGrid').appendChild(cell);
     ok++;
+    generados.push({placa, color, unidad});
   });
 
   avisoQR(ok+' QR generados.' + (errores.length ? ('  Con problema: '+errores.join(' · ')) : ''), errores.length>0);
+  guardarQrGenerados(generados);
+}
+
+// Guarda en el backend las unidades con QR recién generado (para el listado imprimible
+// de la descarga en curso); no bloquea el aviso de arriba, solo agrega el estado al terminar.
+function guardarQrGenerados(generados){
+  if(!generados.length) return;
+  fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify({ accion:'set_qr_lote', lista: generados }) })
+    .then(r=>r.json())
+    .then(r=>{ $('qrAviso').textContent += r.ok ? ' · Guardado en la base de datos.' : ' · No se pudo guardar: '+(r.msg||''); })
+    .catch(()=>{ $('qrAviso').textContent += ' · No se pudo guardar en la base de datos (sin conexión).'; });
 }
 function limpiarQR(){ $('qrGrid').innerHTML=''; avisoQR(''); }
 function avisoQR(t, err){ const e=$('qrAviso'); if(e){ e.textContent=t||''; e.style.color = err ? 'var(--alert)' : 'var(--muted)'; } }
+
+// ── Listado imprimible (tabla) de todas las unidades con QR de esta descarga ──
+function imprimirListado(){
+  fetch(API+'?accion=lista_qr').then(r=>r.json()).then(r=>{
+    if(!r.ok){ alert('No se pudo cargar el listado.'); return; }
+    const lista = (r.lista||[]).slice().sort((a,b)=> a.placa.localeCompare(b.placa));
+    if(!lista.length){ alert('Aún no hay unidades con QR generado para esta descarga.'); return; }
+    $('listadoImprimirCuerpo').innerHTML = lista.map((x,i)=>
+      '<tr><td style="padding:5px 8px">'+(i+1)+'</td><td class="mono" style="padding:5px 8px">'+x.placa+'</td>'+
+      '<td style="padding:5px 8px">'+(x.color||'—')+'</td><td style="padding:5px 8px">'+(x.unidad||'—')+'</td></tr>'
+    ).join('');
+    $('listadoImprimirTotal').textContent = lista.length;
+    $('listadoImprimirFecha').textContent = new Date().toLocaleString('es-GT');
+    document.body.classList.add('imprimiendo-listado');
+    window.print();
+  }).catch(()=>alert('Error de conexión al cargar el listado.'));
+}
+window.addEventListener('afterprint', ()=>{ document.body.classList.remove('imprimiendo-listado'); });
 
 // ── Pestaña GPS: asignar/cambiar GPS por placa ──
 let gpsCache = [];
