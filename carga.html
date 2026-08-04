@@ -115,10 +115,10 @@ function detener(){lector.stop().then(()=>{$('btnDet').classList.add('oculto');$
 function registrarManual(){const p=$('manual').value.trim();if(p){onLeido(p);$('manual').value='';}}
 
 function leerQR(texto){
-  // El QR puede traer JSON {placa,piloto,color,unidad,gps} o solo la placa.
+  // El QR puede traer JSON {placa,piloto,color,unidad,tipo,gps} o solo la placa.
   try{ const d=JSON.parse(texto); if(d&&d.placa)
-    return {placa:String(d.placa).trim().toUpperCase(),piloto:d.piloto||'',color:d.color||'',unidad:d.unidad||'',gps:d.gps||''}; }catch(e){}
-  return {placa:String(texto).trim().toUpperCase(),piloto:'',color:'',unidad:'',gps:''};
+    return {placa:String(d.placa).trim().toUpperCase(),piloto:d.piloto||'',color:d.color||'',unidad:d.unidad||'',tipo:d.tipo||'',gps:d.gps||''}; }catch(e){}
+  return {placa:String(texto).trim().toUpperCase(),piloto:'',color:'',unidad:'',tipo:'',gps:''};
 }
 
 // ── Panel de confirmación: número + color de ticket antes de enviar ──
@@ -167,7 +167,7 @@ function confirmarEnvio(){
 }
 
 function enviar(u){
-  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,gps:u.gps,
+  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,tipo:u.tipo||'',gps:u.gps,
              ticket_numero:u.ticket_numero||'',ticket_color:u.ticket_color||'',
              usuario:$('usuario').value,t:Date.now()};
   mostrar(null,'Enviando '+u.placa+' …');
