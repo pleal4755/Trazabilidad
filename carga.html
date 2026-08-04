@@ -33,6 +33,16 @@
   .oculto{display:none}
   .mono{font-family:"JetBrains Mono",monospace}
   button:focus-visible{outline:3px solid var(--accent-deep);outline-offset:2px}
+
+  #confirm{margin-top:6px}
+  #confirm .placaGrande{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:1.7rem;text-align:center;padding:14px;background:#fff;border:1px solid var(--line);border-radius:12px}
+  #confirm label{display:block;margin-top:14px;font-size:.8rem;color:var(--muted);font-weight:500}
+  #confirm input{margin-top:6px}
+  #colorPicker{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .colorchip{width:52px;height:52px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:#fff}
+  .colorchip.blanca{color:#18211d}
+  .colorchip.sel{box-shadow:0 0 0 3px var(--accent-deep)}
+  #confirmErr{color:#a32d2d;font-size:.85rem;margin-top:8px;min-height:1.1em}
 </style>
 </head>
 <body>
@@ -43,12 +53,26 @@
 
   <div class="cont">
     <input id="usuario" placeholder="Tu nombre (se guarda)">
-    <div id="reader"></div>
-    <button id="btnEsc" class="btn">Escanear placa</button>
-    <button id="btnDet" class="btn sec oculto">Detener</button>
-    <div class="fila">
-      <input id="manual" placeholder="O escribe la placa">
-      <button class="btn sec" onclick="registrarManual()">OK</button>
+    <div id="escaneo">
+      <div id="reader"></div>
+      <button id="btnEsc" class="btn">Escanear placa</button>
+      <button id="btnDet" class="btn sec oculto">Detener</button>
+      <div class="fila">
+        <input id="manual" placeholder="O escribe la placa">
+        <button class="btn sec" onclick="registrarManual()">OK</button>
+      </div>
+    </div>
+    <div id="confirm" class="oculto">
+      <div class="placaGrande" id="confPlaca">—</div>
+      <label for="ticketNum">Número de ticket</label>
+      <input id="ticketNum" inputmode="numeric" pattern="[0-9]*" placeholder="Ej. 1045">
+      <div id="colorWrap" class="oculto">
+        <label>Color de ticket</label>
+        <div id="colorPicker"></div>
+      </div>
+      <div id="confirmErr"></div>
+      <button class="btn" onclick="confirmarEnvio()">Confirmar salida</button>
+      <button class="btn sec" onclick="cancelarConfirmacion()">Cancelar</button>
     </div>
     <div id="res">Apunta la cámara al QR de la placa.</div>
     <div class="barra"><span>En ruta ahora: <b id="enRuta">—</b></span><span id="pend"></span></div>
@@ -60,20 +84,35 @@ const API = 'https://script.google.com/macros/s/AKfycbyUvT67Ky2Mjsj69DlCXyGRxYFk
 const ACCION = 'salida';        // ← este programa SOLO registra salidas (carga en muelle)
 const COLA = 'cola_salida';
 
+// Paleta de colores de ticket (nombre → color real). Debe coincidir con la de portal.html.
+const PALETA_COLORES = {Rojo:'#d92b2b',Azul:'#2563eb',Amarillo:'#eab308',Verde:'#16a34a',
+  Naranja:'#ea580c',Blanco:'#ffffff',Negro:'#111827',Celeste:'#38bdf8',Rosado:'#ec4899',Café:'#7c4a2b'};
+const COLORES_CLAROS = ['Blanco','Amarillo'];
+
 const $=id=>document.getElementById(id);
 const lector=new Html5Qrcode("reader");
 $('usuario').value=localStorage.getItem('usuario')||'';
 $('usuario').addEventListener('change',e=>localStorage.setItem('usuario',e.target.value));
 
+let coloresActivos = [];
+let colorSeleccionado = null;
+let pendiente = null;
+
+function cargarConfigColores(){
+  fetch(API+'?accion=config').then(r=>r.json())
+    .then(r=>{ if(r.ok) coloresActivos = r.colores_ticket||[]; })
+    .catch(()=>{});
+}
+
 $('btnEsc').onclick=()=>{
   lector.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},
-    placa=>{detener();enviar(placa);},()=>{})
+    placa=>{detener();onLeido(placa);},()=>{})
    .then(()=>{$('btnEsc').classList.add('oculto');$('btnDet').classList.remove('oculto');})
    .catch(err=>mostrar(false,'No abrió la cámara (¿permiso? ¿HTTPS?): '+err));
 };
 $('btnDet').onclick=detener;
 function detener(){lector.stop().then(()=>{$('btnDet').classList.add('oculto');$('btnEsc').classList.remove('oculto');}).catch(()=>{});}
-function registrarManual(){const p=$('manual').value.trim();if(p){enviar(p);$('manual').value='';}}
+function registrarManual(){const p=$('manual').value.trim();if(p){onLeido(p);$('manual').value='';}}
 
 function leerQR(texto){
   // El QR puede traer JSON {placa,piloto,color,unidad,gps} o solo la placa.
@@ -81,12 +120,62 @@ function leerQR(texto){
     return {placa:String(d.placa).trim().toUpperCase(),piloto:d.piloto||'',color:d.color||'',unidad:d.unidad||'',gps:d.gps||''}; }catch(e){}
   return {placa:String(texto).trim().toUpperCase(),piloto:'',color:'',unidad:'',gps:''};
 }
-function enviar(entrada){
-  const u=leerQR(entrada);
-  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,gps:u.gps,usuario:$('usuario').value,t:Date.now()};
+
+// ── Panel de confirmación: número + color de ticket antes de enviar ──
+function onLeido(entrada){
+  pendiente = leerQR(entrada);
+  mostrarConfirmacion();
+}
+function mostrarConfirmacion(){
+  $('escaneo').classList.add('oculto');
+  $('confirm').classList.remove('oculto');
+  $('confPlaca').textContent = pendiente.placa;
+  $('ticketNum').value = '';
+  $('confirmErr').textContent = '';
+  colorSeleccionado = null;
+  renderColorPicker();
+  $('ticketNum').focus();
+}
+function renderColorPicker(){
+  if(!coloresActivos.length){ $('colorWrap').classList.add('oculto'); $('colorPicker').innerHTML=''; return; }
+  $('colorWrap').classList.remove('oculto');
+  $('colorPicker').innerHTML = coloresActivos.map(c=>{
+    const hex = PALETA_COLORES[c] || '#7a8a84';
+    const clara = COLORES_CLAROS.includes(c);
+    return '<button type="button" class="colorchip'+(clara?' blanca':'')+'" style="background:'+hex+'" data-color="'+c+'" onclick="seleccionarColor(\''+c.replace(/'/g,'')+'\')" title="'+c+'"></button>';
+  }).join('');
+}
+function seleccionarColor(c){
+  colorSeleccionado = c;
+  document.querySelectorAll('#colorPicker .colorchip').forEach(b=>b.classList.toggle('sel', b.dataset.color===c));
+}
+function cancelarConfirmacion(){
+  pendiente = null; colorSeleccionado = null;
+  $('confirm').classList.add('oculto');
+  $('escaneo').classList.remove('oculto');
+}
+function confirmarEnvio(){
+  if(!pendiente) return;
+  const ticketNum = $('ticketNum').value.trim();
+  if(!ticketNum){ $('confirmErr').textContent='Escribe el número de ticket.'; return; }
+  if(coloresActivos.length && !colorSeleccionado){ $('confirmErr').textContent='Selecciona el color de ticket.'; return; }
+  const u = Object.assign({}, pendiente, {ticket_numero:ticketNum, ticket_color:colorSeleccionado||''});
+  pendiente = null; colorSeleccionado = null;
+  $('confirm').classList.add('oculto');
+  $('escaneo').classList.remove('oculto');
+  enviar(u);
+}
+
+function enviar(u){
+  const reg={accion:ACCION,placa:u.placa,piloto:u.piloto,color:u.color,unidad:u.unidad,gps:u.gps,
+             ticket_numero:u.ticket_numero||'',ticket_color:u.ticket_color||'',
+             usuario:$('usuario').value,t:Date.now()};
   mostrar(null,'Enviando '+u.placa+' …');
   postear(reg).then(r=>{
-    if(r.ok){mostrar(true,'Salida registrada · '+u.placa);$('enRuta').textContent=r.en_ruta;beep();vibra();}
+    if(r.ok){
+      const tk = reg.ticket_numero ? (' · Ticket '+reg.ticket_numero+(reg.ticket_color?(' '+reg.ticket_color):'')) : '';
+      mostrar(true,'Salida registrada · '+u.placa+tk);$('enRuta').textContent=r.en_ruta;beep();vibra();
+    }
     else mostrar(false,r.msg);
   }).catch(()=>{encolar(reg);mostrar(false,'Sin conexión. Guardado para sincronizar.');});
 }
@@ -107,7 +196,7 @@ function mostrar(ok,t){const e=$('res');e.textContent=t;e.className=ok===true?'o
 function vibra(){if(navigator.vibrate)navigator.vibrate(120);}
 function beep(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.frequency.value=880;o.connect(g);g.connect(c.destination);o.start();g.gain.setValueAtTime(.2,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.15);o.stop(c.currentTime+.15);}catch(e){}}
 window.addEventListener('online',sincronizar);
-colaSet(colaGet());refrescar();
+colaSet(colaGet());refrescar();cargarConfigColores();
 </script>
 </body>
 </html>
